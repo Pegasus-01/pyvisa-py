@@ -53,7 +53,7 @@ class SerialSession(Session):
     @classmethod
     def get_low_level_info(cls):
         try:
-            ver = '.'.join(serial.VERSION)
+            ver = serial.VERSION
         except AttributeError:
             ver = 'N/A'
 
@@ -61,11 +61,11 @@ class SerialSession(Session):
 
     def after_parsing(self):
         if 'mock' in self.parsed:
-            cls = self.parsed['mock']
+            cls = self.parsed.mock
         else:
             cls = Serial
 
-        self.interface = cls(port=self.parsed['board'], timeout=2000, writeTimeout=2000)
+        self.interface = cls(port=self.parsed.board, timeout=2000, writeTimeout=2000)
 
         for name in 'ASRL_END_IN,ASRL_END_OUT,SEND_END_EN,TERMCHAR,' \
                     'TERMCHAR_EN,SUPPRESS_END_EN'.split(','):

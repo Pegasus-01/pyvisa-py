@@ -17,10 +17,11 @@ import warnings
 import random
 import re
 
-from pyvisa import constants, errors, highlevel, logger
+from pyvisa import constants, errors, highlevel, rname
 from pyvisa.compat import integer_types, OrderedDict
 
 from . import common, sessions
+from .common import logger
 
 
 class PyVisaLibrary(highlevel.VisaLibraryBase):
@@ -41,25 +42,33 @@ class PyVisaLibrary(highlevel.VisaLibraryBase):
     # Try to import packages implementing lower level functionality.
     try:
         from .serial import SerialSession
+        logger.debug('SerialSession was correctly imported.')
     except ImportError as e:
-        pass
+        logger.debug('SerialSession was not imported %s.' % e)
 
     try:
         from .usb import USBSession
+        logger.debug('USBSession was correctly imported.')
     except ImportError as e:
-        pass
+        logger.debug('USBSession was not imported %s.' % e)
 
     try:
         from .usb import USBRawSession
+        logger.debug('USBRawSession was correctly imported.')
     except ImportError as e:
-        pass
+        logger.debug('USBRawSession was not imported %s.' % e)
 
-    from .tcpip import TCPIPSession
+    try:
+        from .tcpip import TCPIPSession
+        logger.debug('TCPIPSession was correctly imported.')
+    except ImportError as e:
+        logger.debug('TCPIPSession was not imported %s.' % e)
 
     try:
         from .gpib import GPIBSession
+        logger.debug('GPIBSession was correctly imported.')
     except ImportError as e:
-        pass
+        logger.debug('GPIBSession was not imported %s.' % e)
 
     @classmethod
     def get_session_classes(cls):
@@ -180,11 +189,11 @@ class PyVisaLibrary(highlevel.VisaLibraryBase):
             raise ValueError('open_timeout (%r) must be an integer (or compatible type)' % open_timeout)
 
         try:
-            parsed = common.parse_resource_name(resource_name)
-        except common.InvalidResourceName:
+            parsed = rname.parse_resource_name(resource_name)
+        except rname.InvalidResourceName:
             return 0, constants.StatusCode.error_invalid_resource_name
 
-        cls = sessions.Session.get_session_class(parsed['interface_type'], parsed['resource_class'])
+        cls = sessions.Session.get_session_class(parsed.interface_type_const, parsed.resource_class)
 
         sess = cls(session, resource_name, parsed)
 
@@ -216,26 +225,10 @@ class PyVisaLibrary(highlevel.VisaLibraryBase):
         """
         return self._register(self), constants.StatusCode.success
 
-    def find_next(self, find_list):
-        """Returns the next resource from the list of resources found during a previous call to find_resources().
+    def list_resources(self, session, query='?*::INSTR'):
+        """Returns a tuple of all connected devices matching query.
 
-        Corresponds to viFindNext function of the VISA library.
-
-        :param find_list: Describes a find list. This parameter must be created by find_resources().
-        :return: Returns a string identifying the location of a device, return value of the library call.
-        :rtype: unicode | str, VISAStatus
-        """
-        return next(find_list), constants.StatusCode.success
-
-    def find_resources(self, session, query):
-        """Queries a VISA system to locate the resources associated with a specified interface.
-
-        Corresponds to viFindRsrc function of the VISA library.
-
-        :param session: Unique logical identifier to a session (unused, just to uniform signatures).
-        :param query: A regular expression followed by an optional logical expression. Use '?*' for all.
-        :return: find_list, return_counter, instrument_description, return value of the library call.
-        :rtype: ViFindList | int | unicode | str, VISAStatus
+        :param query: regular expression used to match devices.
         """
 
         # For each session type, ask for the list of connected resources and
@@ -247,12 +240,10 @@ class PyVisaLibrary(highlevel.VisaLibraryBase):
         query = query.replace('?*', '.*')
         matcher = re.compile(query, re.IGNORECASE)
 
-        resources = [res for res in resources if matcher.match(res)]
+        resources = tuple(res for res in resources if matcher.match(res))
 
-        count = len(resources)
-        resources = iter(resources)
-        if count:
-            return resources, count, next(resources), constants.StatusCode.success
+        if resources:
+            return resources
 
         raise errors.VisaIOError(errors.StatusCode.error_resource_not_found.value)
 
@@ -283,9 +274,9 @@ class PyVisaLibrary(highlevel.VisaLibraryBase):
         try:
             parsed = common.parse_resource_name(resource_name)
 
-            return (highlevel.ResourceInfo(parsed['interface_type'],
-                                           parsed['board'],
-                                           parsed['resource_class'], None, None),
+            return (highlevel.ResourceInfo(parsed.interface_type_const,
+                                           parsed.board,
+                                           parsed.resource_class, None, None),
                     constants.StatusCode.success)
         except ValueError:
             return 0, constants.StatusCode.error_invalid_resource_name
